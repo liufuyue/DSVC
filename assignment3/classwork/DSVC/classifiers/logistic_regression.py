@@ -1,134 +1,140 @@
+#-*- coding: utf-8 -*-
+from __future__ import print_function
 import numpy as np
-import random
-import math
+import matplotlib.pyplot as plt
+from scipy import optimize
+from matplotlib.font_manager import FontProperties
+font = FontProperties(fname=r"c:\windows\fonts\simsun.ttc", size=14)    # 解决windows环境下画图汉字乱码问题
 
-class LogisticRegression(object):
 
-    def __init__(self):
-        self.w = None
+def LogisticRegression():
+    data = loadtxtAndcsv_data("data2.txt", ",", np.float64) 
+    X = data[:,0:-1]
+    y = data[:,-1]
+    
+    plot_data(X,y)  # 作图
+    
+    X = mapFeature(X[:,0],X[:,1])
+    initial_theta = np.zeros((X.shape[1],1))
+    initial_lambda = 0.1
+    
+    J = costFunction(initial_theta,X,y,initial_lambda)
+    
+    print(J)
 
-    def loss(self, X_batch, y_batch):
-        """
-        Compute the loss function and its derivative.
-        Subclasses will override this.
+    result = optimize.fmin_bfgs(costFunction, initial_theta, fprime=gradient, args=(X,y,initial_lambda))    
+    p = predict(X, result)   #预测
+    print(u'在训练集上的准确度为%f%%'%np.mean(np.float64(p==y)*100))
+    
+    X = data[:,0:-1]
+    y = data[:,-1]    
+    plotDecisionBoundary(result,X,y)
+def loadtxtAndcsv_data(fileName,split,dataType):
+    return np.loadtxt(fileName,delimiter=split,dtype=dataType)
 
-        Inputs:
-        - X_batch: A numpy array of shape (N, D) containing a minibatch of N
-        data points; each point has dimension D.
-        - y_batch: A numpy array of shape (N,) containing labels for the minibatch.
+# 加载npy文件
+def loadnpy_data(fileName):
+    return np.load(fileName)
 
-        Returns: A tuple containing:
-        - loss as a single float
-        - gradient with respect to self.W; an array of the same shape as W
-        """
+# 显示二维图形
+def plot_data(X,y):
+    pos = np.where(y==1)
+    neg = np.where(y==0)
+    plt.figure(figsize=(15,12))
+    plt.plot(X[pos,0],X[pos,1],'ro')        # red o
+    plt.plot(X[neg,0],X[neg,1],'bo')        # blue o
+    plt.title(u"两个类别散点图",fontproperties=font)
+    plt.show()
 
-        #########################################################################
-        # TODO:                                                                 #
-        # calculate the loss and the derivative                                 #
-        #########################################################################
-        pass
-        #########################################################################
-        #                       END OF YOUR CODE                                #
-        #########################################################################
+# 映射为多项式 
+def mapFeature(X1,X2):
+    degree = 2;                     # 映射的最高次方
+    out = np.ones((X1.shape[0],1))  # 映射后的结果数组（取代X）
+    '''
+    这里以degree=2为例，映射为1,x1,x2,x1^2,x1,x2,x2^2
+    '''
+    for i in np.arange(1,degree+1): 
+        for j in range(i+1):
+            temp = X1**(i-j)*(X2**j)
+            out = np.hstack((out, temp.reshape(-1,1)))
+    return out
 
-    def train(self, X, y, learning_rate=1e-3, num_iters=100,
-            batch_size=200, verbose=True):
+# 代价函数
+def costFunction(initial_theta,X,y,inital_lambda):
+    m = len(y)
+    J = 0
+    
+    h = sigmoid(np.dot(X,initial_theta))
+    theta1 = initial_theta.copy()
+    theta1[0] = 0   
+    
+    temp = np.dot(np.transpose(theta1),theta1)
+    J = (-np.dot(np.transpose(y),np.log(h))-np.dot(np.transpose(1-y),np.log(1-h))+temp*inital_lambda/2)/m   # 正则化的代价方程
+    return J
 
-        """
-        Train this linear classifier using stochastic gradient descent.
-        Inputs:
-        - X: A numpy array of shape (N, D) containing training data; there are N
-         training samples each of dimension D.
-        - y: A numpy array of shape (N,) containing training labels;
-        - learning_rate: (float) learning rate for optimization.
-        - num_iters: (integer) number of steps to take when optimizing
-        - batch_size: (integer) number of training examples to use at each step.
-        - verbose: (boolean) If true, print progress during optimization.
+# 计算梯度
+def gradient(initial_theta,X,y,inital_lambda):
+    m = len(y)
+    grad = np.zeros((initial_theta.shape[0]))
+    
+    h = sigmoid(np.dot(X,initial_theta))# 计算h(z)
+    theta1 = initial_theta.copy()
+    theta1[0] = 0
 
-        Outputs:
-        A list containing the value of the loss function at each training iteration.
-        """
-        num_train, dim = X.shape
+    grad = np.dot(np.transpose(X),h-y)/m+inital_lambda/m*theta1 #正则化的梯度
+    return grad
 
-        if self.w is None:
-            self.w = 0.001 * np.random.randn(dim)
+# S型函数    
+def sigmoid(z):
+    h = np.zeros((len(z),1))
+    
+    h = 1.0/(1.0+np.exp(-z))
+    return h
 
-        loss_history = []
 
-        for it in xrange(num_iters):
-            X_batch = None
-            y_batch = None
+#画决策边界
+def plotDecisionBoundary(theta,X,y):
+    pos = np.where(y==1)    #找到y==1的坐标位置
+    neg = np.where(y==0)    #找到y==0的坐标位置
+    #作图
+    plt.figure(figsize=(15,12))
+    plt.plot(X[pos,0],X[pos,1],'ro')        # red o
+    plt.plot(X[neg,0],X[neg,1],'bo')        # blue o
+    plt.title(u"决策边界",fontproperties=font)
+    
 
-            #########################################################################
-            # TODO:                                                                 #
-            # Sample batch_size elements from the training data and their           #
-            # corresponding labels to use in this round of gradient descent.        #
-            # Store the data in X_batch and their corresponding labels in           #
-            # y_batch; after sampling X_batch should have shape (batch_size, dim)   #
-            # and y_batch should have shape (batch_size,)                           #
-            #                                                                       #
-            # Hint: Use np.random.choice to generate indices. Sampling with         #
-            # replacement is faster than sampling without replacement.              #
-            #########################################################################
-            pass
-            #########################################################################
-            #                       END OF YOUR CODE                                #
-            #########################################################################
+    u = np.linspace(-1,1.5,50)
+    v = np.linspace(-1,1.5,50)
+    
+    z = np.zeros((len(u),len(v)))
+    for i in range(len(u)):
+        for j in range(len(v)):
+            z[i,j] = np.dot(mapFeature(u[i].reshape(1,-1),v[j].reshape(1,-1)),theta)    # 计算对应的值，需要map
+    
+    z = np.transpose(z)
+    plt.contour(u,v,z,[0,0.01],linewidth=2.0)
+    plt.show()
 
-            # evaluate loss and gradient
-            loss, grad = self.loss(X_batch, y_batch)
-            loss_history.append(loss)
+# 预测
+def predict(X,theta):
+    m = X.shape[0]
+    p = np.zeros((m,1))
+    p = sigmoid(np.dot(X,theta))    # 预测的结果，是个概率值
+    
+    for i in range(m):
+        if p[i] > 0.5:
+            p[i] = 1
+        else:
+            p[i] = 0
+    return p
 
-            # perform parameter update
-            #########################################################################
-            # TODO:                                                                 #
-            # Update the weights using the gradient and the learning rate.          #
-            #########################################################################
-            pass
-            #########################################################################
-            #                       END OF YOUR CODE                                #
-            #########################################################################
 
-            if verbose and it % 100 == 0:
-                print 'iteration %d / %d: loss %f' % (it, num_iters, loss)
+# 测试逻辑回归函数
+def testLogisticRegression():
+    LogisticRegression()
 
-        return loss_history
 
-    def predict(self, X):
-        """
-        Use the trained weights of this linear classifier to predict labels for
-        data points.
+if __name__ == "__main__":
+    testLogisticRegression()
+    
 
-        Inputs:
-        - X: N x D array of training data. Each column is a D-dimensional point.
-
-        Returns:
-        - y_pred: Predicted labels for the data in X. y_pred is a 1-dimensional
-        array of length N, and each element is an integer giving the predicted
-        class.
-        """
-        y_pred = np.zeros(X.shape[1])
-        ###########################################################################
-        # TODO:                                                                   #
-        # Implement this method. Store the predicted labels in y_pred.            #
-        ###########################################################################
-        pass
-        ###########################################################################
-        #                           END OF YOUR CODE                              #
-        ###########################################################################
-        return y_pred
-
-    def one_vs_all(self, X, y, learning_rate=1e-3, num_iters=100,
-            batch_size=200, verbose = True):
-        """
-        Train this linear classifier using stochastic gradient descent.
-        Inputs:
-        - X: A numpy array of shape (N, D) containing training data; there are N
-         training samples each of dimension D.
-        - y: A numpy array of shape (N,) containing training labels;
-        - learning_rate: (float) learning rate for optimization.
-        - num_iters: (integer) number of steps to take when optimizing
-        - batch_size: (integer) number of training examples to use at each step.
-        - verbose: (boolean) If true, print progress during optimization.
-
-        """
